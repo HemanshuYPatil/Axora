@@ -52,17 +52,18 @@ export const getProductById = query({
 });
 
 export const getSellerProducts = query({
-  args: { sellerClerkUserId: v.string() },
+  args: {
+    sellerClerkUserId: v.string(),
+    refreshKey: v.optional(v.number()),
+  },
   handler: async (ctx, args) => {
-    const products = await ctx.db
-      .query("products")
-      .withIndex("by_seller_clerk_user_id", (q) =>
-        q.eq("sellerClerkUserId", args.sellerClerkUserId)
-      )
-      .collect();
+    const products = await ctx.db.query("products").collect();
+    const sellerProducts = products
+      .filter((product) => product.sellerClerkUserId === args.sellerClerkUserId)
+      .sort((a, b) => b._creationTime - a._creationTime);
 
     return Promise.all(
-      products.map(async (product) => ({
+      sellerProducts.map(async (product) => ({
         ...product,
         image: await ctx.storage.getUrl(product.imageId),
       }))

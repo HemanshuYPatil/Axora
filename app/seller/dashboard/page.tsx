@@ -5,6 +5,7 @@ import Link from "next/link";
 import { SignInButton, useUser } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -40,17 +41,19 @@ const toInr = (amount: number) => `?${amount.toLocaleString("en-IN")}`;
 const parseMoneyString = (value: string) => value.replace(/[^\d]/g, "");
 
 export default function SellerDashboard() {
+  const router = useRouter();
   const { isLoaded, isSignedIn, user } = useUser();
   const generateUploadUrl = useMutation(api.products.generateUploadUrl);
   const createProduct = useMutation(api.products.createProduct);
   const updateProduct = useMutation(api.products.updateProduct);
   const deleteProduct = useMutation(api.products.deleteProduct);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const sellerProducts =
     useQuery(
       api.products.getSellerProducts,
       isLoaded && isSignedIn && user
-        ? { sellerClerkUserId: user.id }
+        ? { sellerClerkUserId: user.id, refreshKey }
         : "skip"
     ) ?? [];
 
@@ -145,6 +148,8 @@ export default function SellerDashboard() {
           ...payload,
           imageId: uploadedImageId,
         });
+        setRefreshKey((prev) => prev + 1);
+        router.refresh();
         alert("Product updated successfully");
       } else {
         if (!uploadedImageId) {
@@ -155,6 +160,8 @@ export default function SellerDashboard() {
           ...payload,
           imageId: uploadedImageId,
         });
+        setRefreshKey((prev) => prev + 1);
+        router.refresh();
         alert("Product uploaded successfully");
       }
 
@@ -201,6 +208,8 @@ export default function SellerDashboard() {
         id: productId,
         sellerClerkUserId: user.id,
       });
+      setRefreshKey((prev) => prev + 1);
+      router.refresh();
 
       if (editingProductId === productId) {
         resetForm();
