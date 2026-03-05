@@ -12,7 +12,8 @@ export default defineSchema({
     imageId: v.id("_storage"),
     category: v.string(),
     badge: v.optional(v.string()),
-  }),
+    sellerClerkUserId: v.optional(v.string()),
+  }).index("by_seller_clerk_user_id", ["sellerClerkUserId"]),
   reviews: defineTable({
     productId: v.string(),
     userName: v.string(),

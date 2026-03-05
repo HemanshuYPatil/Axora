@@ -7,7 +7,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { SignInButton, useUser } from "@clerk/nextjs";
+import { SignInButton, UserButton, useUser } from "@clerk/nextjs";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -85,13 +85,11 @@ export default function Home() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [deliveryLocationText, setDeliveryLocationText] = useState(() => {
     if (typeof navigator !== "undefined" && !navigator.geolocation) {
-      return "Location not supported";
+      return "Detecting location...";
     }
 
-    return "Requesting location...";
+    return "Detecting location...";
   });
-  const [locationStatus, setLocationStatus] = useState<"idle" | "ready" | "error">("idle");
-  const [isLocating, setIsLocating] = useState(false);
 
   // Use this state to track if user has submitted a search to force animation
   const [triggerRender, setTriggerRender] = useState(0);
@@ -134,16 +132,19 @@ export default function Home() {
         const data = await response.json();
         const address = data?.address ?? {};
 
-        const locality =
+        const area =
+          address.suburb ??
+          address.neighbourhood ??
+          address.city_district ??
+          address.quarter ??
+          address.residential ??
           address.city ??
           address.town ??
           address.village ??
           address.county ??
           address.hamlet;
-        const region = address.state ?? address.region;
-        const country = address.country;
 
-        return [locality, region, country].filter(Boolean).slice(0, 2).join(", ");
+        return area ?? "";
       } catch {
         return "";
       }
@@ -169,24 +170,20 @@ export default function Home() {
         return "";
       }
 
-      return [data.city, data.region, data.country]
-        .filter(Boolean)
-        .slice(0, 2)
-        .join(", ");
+      return data.city ?? data.region ?? data.country ?? "";
     } catch {
       return "";
     }
   }, []);
 
   const detectLocation = useCallback(async () => {
+    setDeliveryLocationText("Detecting location...");
+
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setDeliveryLocationText("Location not supported");
-      setLocationStatus("error");
+      const ipLabel = await resolveApproxLocationFromIp();
+      setDeliveryLocationText(ipLabel || "Location unavailable");
       return;
     }
-
-    setIsLocating(true);
-    setDeliveryLocationText("Requesting location...");
 
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) =>
@@ -201,30 +198,24 @@ export default function Home() {
       const longitude = Number(position.coords.longitude.toFixed(4));
       const label = await resolveLocationLabel(latitude, longitude);
       setDeliveryLocationText(label || `Lat ${latitude}, Lng ${longitude}`);
-      setLocationStatus("ready");
-    } catch (error) {
-      const geoError = error as GeolocationPositionError;
+    } catch {
       const ipLabel = await resolveApproxLocationFromIp();
       if (ipLabel) {
-        setDeliveryLocationText(`${ipLabel} (approx)`);
-        setLocationStatus("ready");
-      } else if (geoError.code === 1) {
-        setDeliveryLocationText("Location permission denied");
-        setLocationStatus("error");
-      } else if (geoError.code === 3) {
-        setDeliveryLocationText("Location request timed out");
-        setLocationStatus("error");
+        setDeliveryLocationText(ipLabel);
       } else {
-        setDeliveryLocationText("Unable to detect location");
-        setLocationStatus("error");
+        setDeliveryLocationText("Location unavailable");
       }
-    } finally {
-      setIsLocating(false);
     }
   }, [resolveApproxLocationFromIp, resolveLocationLabel]);
 
   useEffect(() => {
-    void detectLocation();
+    const timerId = window.setTimeout(() => {
+      void detectLocation();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
   }, [detectLocation]);
 
   // --- Handlers ---
@@ -369,25 +360,6 @@ export default function Home() {
             <span className="font-semibold text-gray-900 truncate max-w-[110px] sm:max-w-[180px] md:max-w-[240px]">
               {deliveryLocationText}
             </span>
-            {isLocating ? (
-              <span className="text-[10px] text-gray-500">Detecting...</span>
-            ) : locationStatus === "error" ? (
-              <button
-                type="button"
-                onClick={() => void detectLocation()}
-                className="text-[10px] font-semibold text-[var(--color-brand)] hover:underline"
-              >
-                Retry
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => void detectLocation()}
-                className="text-[10px] text-gray-500 hover:text-[var(--color-brand)] transition-colors"
-              >
-                Refresh
-              </button>
-            )}
           </div>
         </div>
 
@@ -412,10 +384,16 @@ export default function Home() {
               <span className="hidden md:block mt-1 text-[10px] uppercase tracking-wider">Sell</span>
            </Link>
            {clerkLoaded && isSignedIn ? (
-             <button className="flex flex-col items-center hover:text-[var(--color-brand)] transition-colors">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                <span className="hidden md:block mt-1 text-[10px] uppercase tracking-wider">Profile</span>
-             </button>
+             <div className="flex flex-col items-center gap-1">
+                <UserButton
+                  appearance={{
+                    elements: {
+                      avatarBox: "h-8 w-8",
+                    },
+                  }}
+                />
+                <span className="hidden md:block text-[10px] uppercase tracking-wider">Profile</span>
+             </div>
            ) : (
              <SignInButton mode="modal">
                <button className="flex flex-col items-center hover:text-[var(--color-brand)] transition-colors">
